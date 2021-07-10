@@ -12,27 +12,52 @@
 
 
 #define NULL ((void*)0)
-#define run_test() map_rehashing()
+#define run_test() map_delete_whit_get()
 
-int main() {
-    run_test();
-}
 
 /**
  * 字典数据结构测试
  * 对字典添加一个值，并取出
+ * 其中dictAdd只有添加功能
  *
  */
 void map_add_whit_get() {
 
-    dict *map = dictCreate(&clusterNodesDictType, NULL);
+    dict *map = dictCreate(&shaScriptObjectDictType, NULL);
 
     dictAdd(map, "ceshiyix", "wojiapom");
+    dictAdd(map, "ceshiyix", "wojiapom1");
     dictEntry *node = dictFind(map, "ceshiyix");
 
     printf("%s\n", node->key);
     printf("%s\n", node->val);
 }
+
+
+void map_delete_whit_get() {
+
+    dict *map = dictCreate(&shaScriptObjectDictType, NULL);
+    dictAdd(map, "ceshiyix", "wojiapom");
+    dictDelete(map, "ceshiyix");
+    dictEntry *node = dictFind(map, "ceshiyix");
+
+    printf("%s\n", node->key);
+    printf("%s\n", node->val);
+}
+
+
+void map_dictReplace_whit_get() {
+
+    dict *map = dictCreate(&shaScriptObjectDictType, NULL);
+
+    dictReplace(map, "ceshiyix", "wojiapom");
+    dictReplace(map, "ceshiyix", "wojiapom1");
+    dictEntry *node = dictFind(map, "ceshiyix");
+
+    printf("%s\n", node->key);
+    printf("%s\n", node->val);
+}
+
 
 
 /**
@@ -42,7 +67,7 @@ void map_add_whit_get() {
  *
  */
 void map_rehashing() {
-    dict *map = dictCreate(&clusterNodesDictType, NULL);
+    dict *map = dictCreate(&shaScriptObjectDictType, NULL);
 
     dictAdd(map, "k1", "wojiapom");
     dictAdd(map, "k2", "wojiapom");
@@ -53,5 +78,22 @@ void map_rehashing() {
     dictAdd(map, "k7", "wojiapom");
     dictAdd(map, "k8", "wojiapom");
 
+    dictEntry *node1 = dictFind(map, "k1");
+    dictEntry *node2 = dictFind(map, "k2");
+
+    printf("%s\n", node1->key);
+    printf("%s\n", node1->val);
+
+    printf("%s\n", node2->key);
+    printf("%s\n", node2->val);
+
 }
+
+
+int main() {
+    run_test();
+}
+
+
+
 

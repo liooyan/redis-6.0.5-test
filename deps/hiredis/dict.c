@@ -132,6 +132,13 @@ static int dictExpand(dict *ht, unsigned long size) {
 }
 
 /* Add an element to the target hash table */
+/**
+ * 添加数据
+ * @param ht
+ * @param key
+ * @param val
+ * @return
+ */
 static int dictAdd(dict *ht, void *key, void *val) {
     int index;
     dictEntry *entry;
@@ -210,31 +217,48 @@ static int dictDelete(dict *ht, const void *key) {
 }
 
 /* Destroy an entire hash table */
+/**
+ *
+ * 遍历删除每个节点，并释放每个节点的内存空间
+ * @param ht
+ * @return
+ */
 static int _dictClear(dict *ht) {
     unsigned long i;
 
     /* Free all the elements */
+    /**
+     * 遍历数组
+     */
     for (i = 0; i < ht->size && ht->used > 0; i++) {
         dictEntry *he, *nextHe;
 
         if ((he = ht->table[i]) == NULL) continue;
         while(he) {
             nextHe = he->next;
+            //释放k-v的内存
             dictFreeEntryKey(ht, he);
             dictFreeEntryVal(ht, he);
+            //释放dictEntity的空间
             free(he);
             ht->used--;
             he = nextHe;
         }
     }
     /* Free the table and the allocated cache structure */
+    //释放数组空间
     free(ht->table);
     /* Re-initialize the table */
+    //初始化dict
     _dictReset(ht);
     return DICT_OK; /* never fails */
 }
 
 /* Clear & Release the hash table */
+/**
+ * 清空当前字典
+ * @param ht
+ */
 static void dictRelease(dict *ht) {
     _dictClear(ht);
     free(ht);
@@ -292,11 +316,18 @@ static void dictReleaseIterator(dictIterator *iter) {
 /* ------------------------- private functions ------------------------------ */
 
 /* Expand the hash table if needed */
+/**
+ * 创建或扩容 dict的数组空间
+ * @param ht
+ * @return
+ */
 static int _dictExpandIfNeeded(dict *ht) {
     /* If the hash table is empty expand it to the initial size,
      * if the table is "full" dobule its size. */
+    //当ht为0时，说明需要创建数组，则创建长度为4的数组
     if (ht->size == 0)
         return dictExpand(ht, DICT_HT_INITIAL_SIZE);
+    //当ht数据满后说明需要扩容，扩容为原来两杯
     if (ht->used == ht->size)
         return dictExpand(ht, ht->size*2);
     return DICT_OK;
@@ -322,12 +353,16 @@ static int _dictKeyIndex(dict *ht, const void *key) {
     dictEntry *he;
 
     /* Expand the hashtable if needed */
+    // 判断ht数组是否需要创建或者扩容。如果扩容失败，则返回-1
     if (_dictExpandIfNeeded(ht) == DICT_ERR)
         return -1;
     /* Compute the key hash value */
+    // 将key的hash 与ht长度 做 & 运算获取到数据应该存放的数组位置h
     h = dictHashKey(ht, key) & ht->sizemask;
     /* Search if this slot does not already contain the given key */
+    // 根据数组下标取到具体数据
     he = ht->table[h];
+
     while(he) {
         if (dictCompareHashKeys(ht, key, he->key))
             return -1;

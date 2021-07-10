@@ -9,5 +9,5 @@
 # include "dict.h"
 
 
-void frit_test();
+void map_add_whit_get();
 void map_rehashing();

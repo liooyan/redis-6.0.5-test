@@ -108,11 +108,18 @@ static void _dictReset(dictht *ht)
 }
 
 /* Create a new hash table */
+/**
+ * 创建dict
+ *
+ * @param type
+ * @param privDataPtr
+ * @return
+ */
 dict *dictCreate(dictType *type,
         void *privDataPtr)
 {
     dict *d = zmalloc(sizeof(*d));
-
+    //初始化
     _dictInit(d,type,privDataPtr);
     return d;
 }
@@ -185,22 +192,40 @@ int dictExpand(dict *d, unsigned long size)
  * guaranteed that this function will rehash even a single bucket, since it
  * will visit at max N*10 empty buckets in total, otherwise the amount of
  * work it does would be unbound and the function may block for a long time. */
+/**
+ * 将节点刷新至扩容后的空间中。
+ * 每次刷新数组那个元素的链表的数据，
+ *
+ * redis扩容采用的是渐进式刷新，需要扩容时，会创建一个扩容后的空间，此时系统不会直接将所有数据全部复制到新的空间中，
+ * 而是每次操作当前map时，会将一个节点刷新至新的空间中，直到所有数据全部刷新至扩容后的空间。
+ *
+ * 这也导致当map正在刷新时，对于数据的curd都需要对两个空间同时进行操作
+ *
+ *
+ * @param d
+ * @param n
+ * @return
+ */
 int dictRehash(dict *d, int n) {
     int empty_visits = n*10; /* Max number of empty buckets to visit. */
     if (!dictIsRehashing(d)) return 0;
-
+    //循环n次，每次属性一个链表数据
     while(n-- && d->ht[0].used != 0) {
         dictEntry *de, *nextde;
 
         /* Note that rehashidx can't overflow as we are sure there are more
          * elements because ht[0].used != 0 */
         assert(d->ht[0].size > (unsigned long)d->rehashidx);
+        //判断数组中哪个元素有值，并将当前元素下标记录在rehashidx中。
+        //最多遍历 n*10个元素
         while(d->ht[0].table[d->rehashidx] == NULL) {
             d->rehashidx++;
             if (--empty_visits == 0) return 1;
         }
+        //获取到当前链表的第一个元素
         de = d->ht[0].table[d->rehashidx];
         /* Move all the keys in this bucket from the old to the new hash HT */
+        //将整个链表属性至新的空间中
         while(de) {
             uint64_t h;
 
@@ -218,10 +243,15 @@ int dictRehash(dict *d, int n) {
     }
 
     /* Check if we already rehashed the whole table... */
+    //判断是否刷新完成
     if (d->ht[0].used == 0) {
+        //释放ht0的空间
         zfree(d->ht[0].table);
+        //将ht1负值到ht0
         d->ht[0] = d->ht[1];
+        //初始化ht1
         _dictReset(&d->ht[1]);
+        //将rehashidx记录为-1说明刷新完成
         d->rehashidx = -1;
         return 0;
     }
@@ -257,17 +287,26 @@ int dictRehashMilliseconds(dict *d, int ms) {
  * This function is called by common lookup or update operations in the
  * dictionary so that the hash table automatically migrates from H1 to H2
  * while it is actively used. */
+/**
+ * 判断当前是否有正在刷新的数据，如果没有则将一个数据刷新至扩容后的数据中
+ *
+ * @param d
+ */
 static void _dictRehashStep(dict *d) {
     if (d->iterators == 0) dictRehash(d,1);
 }
 
 /* Add an element to the target hash table */
+// 添加k-v值
 int dictAdd(dict *d, void *key, void *val)
 {
+    // 添加k
     dictEntry *entry = dictAddRaw(d,key,NULL);
-
+    //如果返回的entry为空说明添加失败
     if (!entry) return DICT_ERR;
+    //为当前节点设置我们需要的值，这里不会创建新空间，还是直接引用之前的val
     dictSetVal(d, entry, val);
+    //返回设置成功
     return DICT_OK;
 }
 
@@ -289,16 +328,26 @@ int dictAdd(dict *d, void *key, void *val)
  *
  * If key was added, the hash entry is returned to be manipulated by the caller.
  */
+/**
+ *
+ *
+ * @param d  dict对象，保存者字典的数据结构
+ * @param key 字典k
+ * @param existing 如果添加的k已经存在则将其指针负值给existing
+ * @return
+ */
 dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing)
 {
     long index;
     dictEntry *entry;
     dictht *ht;
-
+    //当前字典是否正在扩容，当标志位不为-1时，说明在扩容
+    //当节点正在扩容是，将一个节点刷新至扩容后的数据中
     if (dictIsRehashing(d)) _dictRehashStep(d);
 
     /* Get the index of the new element, or -1 if
      * the element already exists. */
+    // 根据key的hash值计算出当前节点应该存放节点的位置
     if ((index = _dictKeyIndex(d, key, dictHashKey(d,key), existing)) == -1)
         return NULL;
 
@@ -306,14 +355,20 @@ dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing)
      * Insert the element in top, with the assumption that in a database
      * system it is more likely that recently added entries are accessed
      * more frequently. */
+    // 判断当前map是否正在刷新，如果在刷新说明需要将数据存放在扩容后的空间中
     ht = dictIsRehashing(d) ? &d->ht[1] : &d->ht[0];
+    //分配节点空间
     entry = zmalloc(sizeof(*entry));
+    //将最新添加的节点分配在链表的第一个位置
     entry->next = ht->table[index];
     ht->table[index] = entry;
+    //将userd加一
     ht->used++;
 
     /* Set the hash entry fields. */
+    //设置节点的key，这里会调用type的 key dup函数
     dictSetKey(d, entry, key);
+    //返回新添加的节点
     return entry;
 }
 
@@ -328,6 +383,7 @@ int dictReplace(dict *d, void *key, void *val)
 
     /* Try to add the element. If the key
      * does not exists dictAdd will succeed. */
+    //添加数据，如果entry不为null说明是新的节点直接添加
     entry = dictAddRaw(d,key,&existing);
     if (entry) {
         dictSetVal(d, entry, val);
@@ -339,6 +395,7 @@ int dictReplace(dict *d, void *key, void *val)
      * as the previous one. In this context, think to reference counting,
      * you want to increment (set), and then decrement (free), and not the
      * reverse. */
+    //设置新的值，并释放原来数据的值内存
     auxentry = *existing;
     dictSetVal(d, existing, val);
     dictFreeVal(d, &auxentry);
@@ -361,27 +418,40 @@ dictEntry *dictAddOrFind(dict *d, void *key) {
 /* Search and remove an element. This is an helper function for
  * dictDelete() and dictUnlink(), please check the top comment
  * of those functions. */
+/**
+ * 删除元素，根据nofree判断不同情况
+ * 0、在词典中删除，并释放空间
+ * 非0、只是将节点在字典中删除，对于其内存空间不进行是否
+ * @param d
+ * @param key
+ * @param nofree
+ * @return
+ */
 static dictEntry *dictGenericDelete(dict *d, const void *key, int nofree) {
     uint64_t h, idx;
     dictEntry *he, *prevHe;
     int table;
 
     if (d->ht[0].used == 0 && d->ht[1].used == 0) return NULL;
-
+    //判断刷新
     if (dictIsRehashing(d)) _dictRehashStep(d);
+    //计算hash
     h = dictHashKey(d, key);
-
+    //在两个数组中检索数据
     for (table = 0; table <= 1; table++) {
         idx = h & d->ht[table].sizemask;
         he = d->ht[table].table[idx];
         prevHe = NULL;
         while(he) {
+            //当找到元素时删除节点
             if (key==he->key || dictCompareKeys(d, key, he->key)) {
                 /* Unlink the element from the list */
+                //在链表中删除当前节点
                 if (prevHe)
                     prevHe->next = he->next;
                 else
                     d->ht[table].table[idx] = he->next;
+                //判断释放要释放空间
                 if (!nofree) {
                     dictFreeKey(d, he);
                     dictFreeVal(d, he);
@@ -390,9 +460,11 @@ static dictEntry *dictGenericDelete(dict *d, const void *key, int nofree) {
                 d->ht[table].used--;
                 return he;
             }
+            //遍历下一个元素
             prevHe = he;
             he = he->next;
         }
+        //非刷新时，只判断第一个元素
         if (!dictIsRehashing(d)) break;
     }
     return NULL; /* not found */
@@ -477,10 +549,13 @@ dictEntry *dictFind(dict *d, const void *key)
 {
     dictEntry *he;
     uint64_t h, idx, table;
-
+    //判断是否有数据
     if (dictSize(d) == 0) return NULL; /* dict is empty */
+    //对于正在刷新数据执行刷新操作
     if (dictIsRehashing(d)) _dictRehashStep(d);
+    //计算当前key的下标
     h = dictHashKey(d, key);
+    //在两个字典中都获取数据
     for (table = 0; table <= 1; table++) {
         idx = h & d->ht[table].sizemask;
         he = d->ht[table].table[idx];
@@ -991,6 +1066,14 @@ static unsigned long _dictNextPower(unsigned long size)
  *
  * Note that if we are in the process of rehashing the hash table, the
  * index is always returned in the context of the second (new) hash table. */
+/**
+ * 返回当前key的索引，如果键已经存在则返回-1，同时将节点指针负值给参数existing
+ * @param d
+ * @param key
+ * @param hash
+ * @param existing
+ * @return
+ */
 static long _dictKeyIndex(dict *d, const void *key, uint64_t hash, dictEntry **existing)
 {
     unsigned long idx, table;
@@ -998,13 +1081,18 @@ static long _dictKeyIndex(dict *d, const void *key, uint64_t hash, dictEntry **e
     if (existing) *existing = NULL;
 
     /* Expand the hash table if needed */
+    // 判断ht数组是否需要创建或者扩容。如果扩容失败，则返回-1
     if (_dictExpandIfNeeded(d) == DICT_ERR)
         return -1;
+    // 遍历ht0和ht1
     for (table = 0; table <= 1; table++) {
+        //计算出需要保存的下标
         idx = hash & d->ht[table].sizemask;
         /* Search if this slot does not already contain the given key */
+        //取出对应链表
         he = d->ht[table].table[idx];
         while(he) {
+            //如果当前节点已经存在则将节点指针负值给参数existing
             if (key==he->key || dictCompareKeys(d, key, he->key)) {
                 if (existing) *existing = he;
                 return -1;
