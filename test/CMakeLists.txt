@@ -102,3 +102,25 @@ target_link_libraries(dict_test
         PRIVATE linenoise
         PRIVATE hiredis
         )
+
+
+
+
+set(skip_test_dir skip_test.c ${SRC_SERVER_TMP})
+
+
+ADD_EXECUTABLE(skip_test ${skip_test_dir})
+
+
+target_include_directories(skip_test
+        PRIVATE ${REDIS_ROOT}/deps/hiredis
+        PRIVATE ${REDIS_ROOT}/deps/linenoise
+        PRIVATE ${REDIS_ROOT}/deps/lua/src
+        )
+
+
+target_link_libraries(skip_test
+        PRIVATE lua
+        PRIVATE linenoise
+        PRIVATE hiredis
+        )
