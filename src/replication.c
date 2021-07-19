@@ -2111,6 +2111,7 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
 
 /* This handler fires when the non blocking connect was able to
  * establish a connection with the master. */
+//以事件方式触发。在创建主连接后
 void syncWithMaster(connection *conn) {
     char tmpfile[256], *err = NULL;
     int dfd = -1, maxtries = 5;
@@ -2472,27 +2473,32 @@ int cancelReplicationHandshake(void) {
 /* Set replication to the specified master address and port. */
 void replicationSetMaster(char *ip, int port) {
     int was_master = server.masterhost == NULL;
-
+    //设置ip
     sdsfree(server.masterhost);
     server.masterhost = sdsnew(ip);
+    //设置端口
     server.masterport = port;
     if (server.master) {
         freeClient(server.master);
     }
+    //如果目前有其他阻塞的操作，等待其完成后进行
     disconnectAllBlockedClients(); /* Clients blocked in master, now slave. */
 
     /* Force our slaves to resync with us as well. They may hopefully be able
      * to partially resync with us, but we can notify the replid change. */
+    //如果自己有从服务器，关闭连接
     disconnectSlaves();
     cancelReplicationHandshake();
     /* Before destroying our master state, create a cached master using
      * our own parameters, to later PSYNC with the new master. */
+    //当主节点降为从节点是调用
     if (was_master) {
         replicationDiscardCachedMaster();
         replicationCacheMasterUsingMyself();
     }
 
     /* Fire the role change modules event. */
+    //发送事件
     moduleFireServerEvent(REDISMODULE_EVENT_REPLICATION_ROLE_CHANGED,
                           REDISMODULE_EVENT_REPLROLECHANGED_NOW_REPLICA,
                           NULL);
@@ -2579,6 +2585,7 @@ void replicationHandleMasterDisconnection(void) {
 void replicaofCommand(client *c) {
     /* SLAVEOF is not allowed in cluster mode as replication is automatically
      * configured using the current address of the master node. */
+    //在非集群模式下才可以开启
     if (server.cluster_enabled) {
         addReplyError(c,"REPLICAOF not allowed in cluster mode.");
         return;
@@ -2586,6 +2593,7 @@ void replicaofCommand(client *c) {
 
     /* The special host/port combination "NO" "ONE" turns the instance
      * into a master. Otherwise the new master address is set. */
+    //对于  SLAVEOF no one 命令，将当前服务从主从分布式中去除
     if (!strcasecmp(c->argv[1]->ptr,"no") &&
         !strcasecmp(c->argv[2]->ptr,"one")) {
         if (server.masterhost) {
@@ -2597,7 +2605,7 @@ void replicaofCommand(client *c) {
         }
     } else {
         long port;
-
+        //副本客户端，不执行命令。具体什么情况下是副本客户端目前不知
         if (c->flags & CLIENT_SLAVE)
         {
             /* If a client is already a replica they cannot run this command,
@@ -2606,11 +2614,12 @@ void replicaofCommand(client *c) {
             addReplyError(c, "Command is not valid when client is a replica.");
             return;
         }
-
+        //将指定的参数转换为long，并负值到port中
         if ((getLongFromObjectOrReply(c, c->argv[2], &port, NULL) != C_OK))
             return;
 
         /* Check if we are already attached to the specified slave */
+        //判断目前与之前的主服务是否相同
         if (server.masterhost && !strcasecmp(server.masterhost,c->argv[1]->ptr)
             && server.masterport == port) {
             serverLog(LL_NOTICE,"REPLICAOF would result into synchronization "
@@ -2622,12 +2631,17 @@ void replicaofCommand(client *c) {
         }
         /* There was no previous master or the user specified a different one,
          * we can continue. */
+        // 主从设置
         replicationSetMaster(c->argv[1]->ptr, port);
+        //将client连接信息转换为字符串
         sds client = catClientInfoString(sdsempty(),c);
+        //日志
         serverLog(LL_NOTICE,"REPLICAOF %s:%d enabled (user request from '%s')",
             server.masterhost, server.masterport, client);
+        //释放空间
         sdsfree(client);
     }
+    //返回结果
     addReply(c,shared.ok);
 }
 
@@ -3104,10 +3118,12 @@ long long replicationGetSlaveOffset(void) {
 /* --------------------------- REPLICATION CRON  ---------------------------- */
 
 /* Replication cron function, called 1 time per second. */
+// 一秒触发一次
 void replicationCron(void) {
     static long long replication_cron_loops = 0;
 
     /* Non blocking connection timeout? */
+    //判断当前正在连接主服务器，并且连接超时，则停止连接。并打印日志
     if (server.masterhost &&
         (server.repl_state == REPL_STATE_CONNECTING ||
          slaveIsInHandshakeState()) &&
@@ -3118,6 +3134,7 @@ void replicationCron(void) {
     }
 
     /* Bulk transfer I/O timeout? */
+    //数据同步超时的操作
     if (server.masterhost && server.repl_state == REPL_STATE_TRANSFER &&
         (time(NULL)-server.repl_transfer_lastio) > server.repl_timeout)
     {
@@ -3126,6 +3143,7 @@ void replicationCron(void) {
     }
 
     /* Timed out master when we are an already connected slave? */
+    // 数据已经同步完，超时？？？
     if (server.masterhost && server.repl_state == REPL_STATE_CONNECTED &&
         (time(NULL)-server.master->lastinteraction) > server.repl_timeout)
     {
@@ -3134,6 +3152,7 @@ void replicationCron(void) {
     }
 
     /* Check if we should connect to a MASTER */
+    //需要同步数据，创建连接
     if (server.repl_state == REPL_STATE_CONNECT) {
         serverLog(LL_NOTICE,"Connecting to MASTER %s:%d",
             server.masterhost, server.masterport);
@@ -3145,6 +3164,7 @@ void replicationCron(void) {
     /* Send ACK to master from time to time.
      * Note that we do not send periodic acks to masters that don't
      * support PSYNC and replication offsets. */
+    //向主服务器发送心跳
     if (server.masterhost && server.master &&
         !(server.master->flags & CLIENT_PRE_PSYNC))
         replicationSendAck();
@@ -3158,6 +3178,7 @@ void replicationCron(void) {
     robj *ping_argv[1];
 
     /* First, send PING according to ping_slave_period. */
+    //ping从服务器，根据repl_ping_slave_period配置
     if ((replication_cron_loops % server.repl_ping_slave_period) == 0 &&
         listLength(server.slaves))
     {
@@ -3192,6 +3213,7 @@ void replicationCron(void) {
      * last interaction timer preventing a timeout. In this case we ignore the
      * ping period and refresh the connection once per second since certain
      * timeouts are set at a few seconds (example: PSYNC response). */
+    //在同步文件前，先发送一个\n符号
     listRewind(server.slaves,&li);
     while((ln = listNext(&li))) {
         client *slave = ln->value;
@@ -3207,6 +3229,7 @@ void replicationCron(void) {
     }
 
     /* Disconnect timedout slaves. */
+    //释放超时的实例
     if (listLength(server.slaves)) {
         listIter li;
         listNode *ln;

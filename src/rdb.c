@@ -1017,12 +1017,14 @@ int rdbSaveKeyValuePair(rio *rdb, robj *key, robj *val, long long expiretime) {
     int savelfu = server.maxmemory_policy & MAXMEMORY_FLAG_LFU;
 
     /* Save the expire time */
+    //如果有时间，先保存失效时间
     if (expiretime != -1) {
         if (rdbSaveType(rdb,RDB_OPCODE_EXPIRETIME_MS) == -1) return -1;
         if (rdbSaveMillisecondTime(rdb,expiretime) == -1) return -1;
     }
 
     /* Save the LRU info. */
+    //保存失效策略
     if (savelru) {
         uint64_t idletime = estimateObjectIdleTime(val);
         idletime /= 1000; /* Using seconds is enough and requires less space.*/
@@ -1043,8 +1045,11 @@ int rdbSaveKeyValuePair(rio *rdb, robj *key, robj *val, long long expiretime) {
     }
 
     /* Save type, key, value */
+    //保存val的数据类型
     if (rdbSaveObjectType(rdb,val) == -1) return -1;
+    //保存key
     if (rdbSaveStringObject(rdb,key) == -1) return -1;
+    //保存val
     if (rdbSaveObject(rdb,val,key) == -1) return -1;
 
     /* Delay return if required (for testing) */
@@ -1161,36 +1166,51 @@ int rdbSaveRio(rio *rdb, int *error, int rdbflags, rdbSaveInfo *rsi) {
     if (server.rdb_checksum)
         rdb->update_cksum = rioGenericUpdateChecksum;
     snprintf(magic,sizeof(magic),"REDIS%04d",RDB_VERSION);
+    //保存固定的文件头：REDIS%04d
     if (rdbWriteRaw(rdb,magic,9) == -1) goto werr;
+    //保存固定的AUX字段
     if (rdbSaveInfoAuxFields(rdb,rdbflags,rsi) == -1) goto werr;
+    //保存modules相关数据，这块在具体分析后说明
     if (rdbSaveModulesAux(rdb, REDISMODULE_AUX_BEFORE_RDB) == -1) goto werr;
-
+    //遍历每个库
     for (j = 0; j < server.dbnum; j++) {
         redisDb *db = server.db+j;
+        //获取到每个库的dict
         dict *d = db->dict;
+        //为空则跳过
         if (dictSize(d) == 0) continue;
+        //获取到当前库的迭代器
         di = dictGetSafeIterator(d);
 
         /* Write the SELECT DB opcode */
+        //保存RDB_OPCODE_SELECTDB。 254，一个字节。说明后面根的是redis具体库的编号
         if (rdbSaveType(rdb,RDB_OPCODE_SELECTDB) == -1) goto werr;
+        //保存库编号
         if (rdbSaveLen(rdb,j) == -1) goto werr;
 
         /* Write the RESIZE DB opcode. */
         uint64_t db_size, expires_size;
+        //dict存储数据数量
         db_size = dictSize(db->dict);
+        //expires存储数据数量
         expires_size = dictSize(db->expires);
+        //保存，241。说明下面数据开始就是我们保存的数据了
         if (rdbSaveType(rdb,RDB_OPCODE_RESIZEDB) == -1) goto werr;
+        //将dict和expires数据进行保存
         if (rdbSaveLen(rdb,db_size) == -1) goto werr;
         if (rdbSaveLen(rdb,expires_size) == -1) goto werr;
 
         /* Iterate this DB writing every entry */
+        //遍历所有k-v数据
         while((de = dictNext(di)) != NULL) {
             sds keystr = dictGetKey(de);
             robj key, *o = dictGetVal(de);
             long long expire;
-
+            //将key 也转换为robj结构
             initStaticStringObject(key,keystr);
+            //获取当前key的过期时间
             expire = getExpire(db,&key);
+            //保存当前k-v数据
             if (rdbSaveKeyValuePair(rdb,&key,o,expire) == -1) goto werr;
 
             /* When this RDB is produced as part of an AOF rewrite, move
@@ -1203,6 +1223,7 @@ int rdbSaveRio(rio *rdb, int *error, int rdbflags, rdbSaveInfo *rsi) {
                 aofReadDiffFromParent();
             }
         }
+        //执行迭代，如果迭代完成，是否迭代器空间
         dictReleaseIterator(di);
         di = NULL; /* So that we don't release it again on error. */
     }
@@ -1225,10 +1246,12 @@ int rdbSaveRio(rio *rdb, int *error, int rdbflags, rdbSaveInfo *rsi) {
     if (rdbSaveModulesAux(rdb, REDISMODULE_AUX_AFTER_RDB) == -1) goto werr;
 
     /* EOF opcode */
+    //保存文件结束信息
     if (rdbSaveType(rdb,RDB_OPCODE_EOF) == -1) goto werr;
 
     /* CRC64 checksum. It will be zero if checksum computation is disabled, the
      * loading code skips the check in this case. */
+    //保存校验核
     cksum = rdb->cksum;
     memrev64ifbe(&cksum);
     if (rioWrite(rdb,&cksum,8) == 0) goto werr;
@@ -1276,8 +1299,9 @@ int rdbSave(char *filename, rdbSaveInfo *rsi) {
     FILE *fp;
     rio rdb;
     int error = 0;
-
+    //生成零时文件
     snprintf(tmpfile,256,"temp-%d.rdb", (int) getpid());
+    //打开文件，以w权限
     fp = fopen(tmpfile,"w");
     if (!fp) {
         char *cwdp = getcwd(cwd,MAXPATHLEN);
@@ -1289,13 +1313,13 @@ int rdbSave(char *filename, rdbSaveInfo *rsi) {
             strerror(errno));
         return C_ERR;
     }
-
+    //初始化rdb对象，
     rioInitWithFile(&rdb,fp);
     startSaving(RDBFLAGS_NONE);
 
     if (server.rdb_save_incremental_fsync)
         rioSetAutoSync(&rdb,REDIS_AUTOSYNC_BYTES);
-
+    //保存文件
     if (rdbSaveRio(&rdb,&error,RDBFLAGS_NONE,rsi) == C_ERR) {
         errno = error;
         goto werr;
@@ -1336,7 +1360,13 @@ werr:
     stopSaving(0);
     return C_ERR;
 }
-
+/**
+ *
+ * 异步保存rdb
+ * @param filename
+ * @param rsi
+ * @return
+ */
 int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
     pid_t childpid;
 
@@ -1345,20 +1375,24 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
     server.dirty_before_bgsave = server.dirty;
     server.lastbgsave_try = time(NULL);
     openChildInfoPipe();
-
+    //创建子线程，创建rdb文件。if里是子线程执行的代码
     if ((childpid = redisFork()) == 0) {
         int retval;
 
         /* Child */
         redisSetProcTitle("redis-rdb-bgsave");
         redisSetCpuAffinity(server.bgsave_cpulist);
+        //与save相同，调用rdbSave
         retval = rdbSave(filename,rsi);
         if (retval == C_OK) {
             sendChildCOWInfo(CHILD_INFO_TYPE_RDB, "RDB");
         }
+        //结束子线程
         exitFromChild((retval == C_OK) ? 0 : 1);
+        //下面是父线程执行的代码
     } else {
         /* Parent */
+        //设置rdb_child_pid属性，并返回ok给客户端
         if (childpid == -1) {
             closeChildInfoPipe();
             server.lastbgsave_status = C_ERR;
@@ -2542,13 +2576,16 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
 }
 
 void saveCommand(client *c) {
+    //子类正在执行。报错
     if (server.rdb_child_pid != -1) {
         addReplyError(c,"Background save already in progress");
         return;
     }
     rdbSaveInfo rsi, *rsiptr;
     rsiptr = rdbPopulateSaveInfo(&rsi);
+    //执行rdb操作
     if (rdbSave(server.rdb_filename,rsiptr) == C_OK) {
+        //返回执行结果
         addReply(c,shared.ok);
     } else {
         addReply(c,shared.err);

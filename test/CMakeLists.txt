@@ -124,3 +124,7 @@ target_link_libraries(skip_test
         PRIVATE linenoise
         PRIVATE hiredis
         )
+
+
+
+ADD_EXECUTABLE(fork_test fork_test.c)

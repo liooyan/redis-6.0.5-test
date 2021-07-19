@@ -90,18 +90,11 @@ set(SRC_CLI
          anet.c  sds.c  adlist.c  redis-cli.c  zmalloc.c  release.c  anet.c  ae.c  crc64.c
         )
 
-add_executable(redis-server ${SRC_SERVER})
 add_executable(redis-cli ${SRC_CLI})
 
 
-
+add_executable(redis-server ${SRC_SERVER})
 target_include_directories(redis-server
-        PRIVATE ${REDIS_ROOT}/deps/hiredis
-        PRIVATE ${REDIS_ROOT}/deps/linenoise
-        PRIVATE ${REDIS_ROOT}/deps/lua/src
-        )
-
-target_include_directories(redis-cli
         PRIVATE ${REDIS_ROOT}/deps/hiredis
         PRIVATE ${REDIS_ROOT}/deps/linenoise
         PRIVATE ${REDIS_ROOT}/deps/lua/src
@@ -113,7 +106,52 @@ target_link_libraries(redis-server
         PRIVATE hiredis
         )
 
-target_link_libraries(redis-cli
+target_include_directories(redis-cli
+        PRIVATE ${REDIS_ROOT}/deps/hiredis
+        PRIVATE ${REDIS_ROOT}/deps/linenoise
+        PRIVATE ${REDIS_ROOT}/deps/lua/src
+        )
+
+
+
+
+# 用于做主从分布式
+add_executable(redis-server-slave-1 ${SRC_SERVER})
+target_include_directories(redis-server-slave-1
+        PRIVATE ${REDIS_ROOT}/deps/hiredis
+        PRIVATE ${REDIS_ROOT}/deps/linenoise
+        PRIVATE ${REDIS_ROOT}/deps/lua/src
+        )
+
+target_link_libraries(redis-server-slave-1
+        PRIVATE lua
+        PRIVATE linenoise
+        PRIVATE hiredis
+        )
+
+add_executable(redis-server-slave-2 ${SRC_SERVER})
+target_include_directories(redis-server-slave-2
+        PRIVATE ${REDIS_ROOT}/deps/hiredis
+        PRIVATE ${REDIS_ROOT}/deps/linenoise
+        PRIVATE ${REDIS_ROOT}/deps/lua/src
+        )
+
+target_link_libraries(redis-server-slave-2
+        PRIVATE lua
+        PRIVATE linenoise
+        PRIVATE hiredis
+        )
+
+
+add_executable(redis-server-slave-3 ${SRC_SERVER})
+target_include_directories(redis-server-slave-3
+        PRIVATE ${REDIS_ROOT}/deps/hiredis
+        PRIVATE ${REDIS_ROOT}/deps/linenoise
+        PRIVATE ${REDIS_ROOT}/deps/lua/src
+        )
+
+target_link_libraries(redis-server-slave-3
+        PRIVATE lua
         PRIVATE linenoise
         PRIVATE hiredis
         )

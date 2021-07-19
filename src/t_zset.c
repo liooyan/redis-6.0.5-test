@@ -129,31 +129,50 @@ int zslRandomLevel(void) {
 /* Insert a new node in the skiplist. Assumes the element does not already
  * exist (up to the caller to enforce that). The skiplist takes ownership
  * of the passed SDS string 'ele'. */
+//在跳跃表中插入一个节点
 zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
+    //update记录我们要插入的节点在每层节点的最后一个值
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
+    //rank 记录，要插入的节点在每层的位置
     unsigned int rank[ZSKIPLIST_MAXLEVEL];
     int i, level;
 
     serverAssert(!isnan(score));
+    //获取头节点
     x = zsl->header;
+    //从最高层查询
     for (i = zsl->level-1; i >= 0; i--) {
         /* store rank that is crossed to reach the insert position */
+        //初始化当前层的rank。当是最开始时，为0。其他情况与上一层相同
         rank[i] = i == (zsl->level-1) ? 0 : rank[i+1];
+        /**
+         * 当前层有前进节点，并且
+         * 当前节点score比要找的小，或者
+         * 当评分一样，当前节点对象比要找的值小。
+         *
+         * 说明我们要插入的节点在当前节点的后面
+         *
+         */
         while (x->level[i].forward &&
                 (x->level[i].forward->score < score ||
                     (x->level[i].forward->score == score &&
                     sdscmp(x->level[i].forward->ele,ele) < 0)))
         {
+            //更新当前rank值，跳跃到下一个节点
             rank[i] += x->level[i].span;
+            //x 跟新为前进节点
             x = x->level[i].forward;
         }
+        //退出上面的循环。说明我们要插入的节点在x的前面。将其记录在update中。
         update[i] = x;
     }
     /* we assume the element is not already inside, since we allow duplicated
      * scores, reinserting the same element should never happen since the
      * caller of zslInsert() should test in the hash table if the element is
      * already inside or not. */
+    //随机层数，
     level = zslRandomLevel();
+    //如果比之前的大，初始化后面rank与update的值
     if (level > zsl->level) {
         for (i = zsl->level; i < level; i++) {
             rank[i] = 0;
@@ -162,7 +181,10 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
         }
         zsl->level = level;
     }
+    //为我们插入的数据创建节点
     x = zslCreateNode(level,score,ele);
+
+    //插入数据，在每层中都插入我们的当前节点
     for (i = 0; i < level; i++) {
         x->level[i].forward = update[i]->level[i].forward;
         update[i]->level[i].forward = x;
@@ -173,10 +195,12 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
     }
 
     /* increment span for untouched levels */
+    //计算我们新加入层数的update值
     for (i = level; i < zsl->level; i++) {
         update[i]->level[i].span++;
     }
 
+    //跟新当前节点的backward值
     x->backward = (update[0] == zsl->header) ? NULL : update[0];
     if (x->level[0].forward)
         x->level[0].forward->backward = x;
@@ -502,8 +526,9 @@ zskiplistNode* zslGetElementByRank(zskiplist *zsl, unsigned long rank) {
     zskiplistNode *x;
     unsigned long traversed = 0;
     int i;
-
+    //获取头
     x = zsl->header;
+    //从最高层查找，根据span计算下一个节点的名次。
     for (i = zsl->level-1; i >= 0; i--) {
         while (x->level[i].forward && (traversed + x->level[i].span) <= rank)
         {
