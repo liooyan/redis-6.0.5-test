@@ -2111,7 +2111,7 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
 
 /* This handler fires when the non blocking connect was able to
  * establish a connection with the master. */
-//以事件方式触发。在创建主连接后
+//以事件方式触发。在创建主连接后触发此方法
 void syncWithMaster(connection *conn) {
     char tmpfile[256], *err = NULL;
     int dfd = -1, maxtries = 5;
@@ -2133,6 +2133,7 @@ void syncWithMaster(connection *conn) {
     }
 
     /* Send a PING to check the master is able to reply without errors. */
+    //ping 主服务器
     if (server.repl_state == REPL_STATE_CONNECTING) {
         serverLog(LL_NOTICE,"Non blocking connect for SYNC fired the event.");
         /* Delete the writable event so that the readable event remains
@@ -2148,6 +2149,7 @@ void syncWithMaster(connection *conn) {
     }
 
     /* Receive the PONG command. */
+    //执行ping后等待主服务器回复
     if (server.repl_state == REPL_STATE_RECEIVE_PONG) {
         err = sendSynchronousCommand(SYNC_CMD_READ,conn,NULL);
 
@@ -2172,6 +2174,7 @@ void syncWithMaster(connection *conn) {
     }
 
     /* AUTH with the master if required. */
+    //用户认证
     if (server.repl_state == REPL_STATE_SEND_AUTH) {
         if (server.masteruser && server.masterauth) {
             err = sendSynchronousCommand(SYNC_CMD_WRITE,conn,"AUTH",
@@ -2203,6 +2206,7 @@ void syncWithMaster(connection *conn) {
 
     /* Set the slave port, so that Master's INFO command can list the
      * slave listening port correctly. */
+    //设置端口
     if (server.repl_state == REPL_STATE_SEND_PORT) {
         int port;
         if (server.slave_announce_port) port = server.slave_announce_port;
@@ -2219,6 +2223,7 @@ void syncWithMaster(connection *conn) {
     }
 
     /* Receive REPLCONF listening-port reply. */
+    //端口设置后等待回复
     if (server.repl_state == REPL_STATE_RECEIVE_PORT) {
         err = sendSynchronousCommand(SYNC_CMD_READ,conn,NULL);
         /* Ignore the error if any, not all the Redis versions support
@@ -2232,6 +2237,7 @@ void syncWithMaster(connection *conn) {
     }
 
     /* Skip REPLCONF ip-address if there is no slave-announce-ip option set. */
+    //设置ip
     if (server.repl_state == REPL_STATE_SEND_IP &&
         server.slave_announce_ip == NULL)
     {
@@ -2268,6 +2274,7 @@ void syncWithMaster(connection *conn) {
      * PSYNC2: supports PSYNC v2, so understands +CONTINUE <new repl ID>.
      *
      * The master will ignore capabilities it does not understand. */
+    //设置capa信息
     if (server.repl_state == REPL_STATE_SEND_CAPA) {
         err = sendSynchronousCommand(SYNC_CMD_WRITE,conn,"REPLCONF",
                 "capa","eof","capa","psync2",NULL);
@@ -2278,6 +2285,7 @@ void syncWithMaster(connection *conn) {
     }
 
     /* Receive CAPA reply. */
+    //capa回复
     if (server.repl_state == REPL_STATE_RECEIVE_CAPA) {
         err = sendSynchronousCommand(SYNC_CMD_READ,conn,NULL);
         /* Ignore the error if any, not all the Redis versions support
@@ -2295,6 +2303,7 @@ void syncWithMaster(connection *conn) {
      * to start a full resynchronization so that we get the master run id
      * and the global offset, to try a partial resync at the next
      * reconnection attempt. */
+    //发送psync信息
     if (server.repl_state == REPL_STATE_SEND_PSYNC) {
         if (slaveTryPartialResynchronization(conn,0) == PSYNC_WRITE_ERROR) {
             err = sdsnew("Write error sending the PSYNC command.");
@@ -2311,7 +2320,7 @@ void syncWithMaster(connection *conn) {
                              server.repl_state);
         goto error;
     }
-
+    //接受psync回复
     psync_result = slaveTryPartialResynchronization(conn,1);
     if (psync_result == PSYNC_WAIT_REPLY) return; /* Try again later... */
 
@@ -2370,6 +2379,7 @@ void syncWithMaster(connection *conn) {
     }
 
     /* Setup the non blocking download of the bulk file. */
+    //设置readSyncBulkPayload函数，等待读取rdb文件
     if (connSetReadHandler(conn, readSyncBulkPayload)
             == C_ERR)
     {
@@ -2491,7 +2501,7 @@ void replicationSetMaster(char *ip, int port) {
     cancelReplicationHandshake();
     /* Before destroying our master state, create a cached master using
      * our own parameters, to later PSYNC with the new master. */
-    //当主节点降为从节点是调用
+    //当主节点降为从节点时调用
     if (was_master) {
         replicationDiscardCachedMaster();
         replicationCacheMasterUsingMyself();
@@ -2508,7 +2518,7 @@ void replicationSetMaster(char *ip, int port) {
         moduleFireServerEvent(REDISMODULE_EVENT_MASTER_LINK_CHANGE,
                               REDISMODULE_SUBEVENT_MASTER_LINK_DOWN,
                               NULL);
-
+    //将复制状态改为等待连接状态
     server.repl_state = REPL_STATE_CONNECT;
 }
 
