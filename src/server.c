@@ -1843,8 +1843,8 @@ void checkChildrenDone(void) {
  */
 
 int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
-    int j;
     UNUSED(eventLoop);
+    int j;
     UNUSED(id);
     UNUSED(clientData);
 
@@ -5008,6 +5008,7 @@ int main(int argc, char **argv) {
     uint8_t hashseed[16];
     getRandomBytes(hashseed,sizeof(hashseed));
     dictSetHashFunctionSeed(hashseed);
+    //校验是否为哨兵模式
     server.sentinel_mode = checkForSentinelMode(argc,argv);
     initServerConfig();
     ACLInit(); /* The ACL subsystem must be initialized ASAP because the
@@ -5025,6 +5026,7 @@ int main(int argc, char **argv) {
     /* We need to init sentinel right now as parsing the configuration file
      * in sentinel mode will have the effect of populating the sentinel
      * data structures with master nodes to monitor. */
+    //哨兵模式下初始化。
     if (server.sentinel_mode) {
         initSentinelConfig();
         initSentinel();

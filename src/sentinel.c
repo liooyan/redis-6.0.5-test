@@ -479,7 +479,9 @@ void initSentinel(void) {
 
     /* Remove usual Redis commands from the command table, then just add
      * the SENTINEL command. */
+    //删除普通的命令
     dictEmpty(server.commands,NULL);
+    //添加哨兵专有的命令
     for (j = 0; j < sizeof(sentinelcmds)/sizeof(sentinelcmds[0]); j++) {
         int retval;
         struct redisCommand *cmd = sentinelcmds+j;
@@ -4513,6 +4515,7 @@ void sentinelHandleRedisInstance(sentinelRedisInstance *ri) {
 
 /* Perform scheduled operations for all the instances in the dictionary.
  * Recursively call the function against dictionaries of slaves. */
+//处理集群中的所有实例
 void sentinelHandleDictOfRedisInstances(dict *instances) {
     dictIterator *di;
     dictEntry *de;
@@ -4522,8 +4525,9 @@ void sentinelHandleDictOfRedisInstances(dict *instances) {
     di = dictGetIterator(instances);
     while((de = dictNext(di)) != NULL) {
         sentinelRedisInstance *ri = dictGetVal(de);
-
+        //处理当前实例
         sentinelHandleRedisInstance(ri);
+        //如果是主节点，处理子节点
         if (ri->flags & SRI_MASTER) {
             sentinelHandleDictOfRedisInstances(ri->slaves);
             sentinelHandleDictOfRedisInstances(ri->sentinels);
@@ -4567,9 +4571,11 @@ void sentinelCheckTiltCondition(void) {
     }
     sentinel.previous_time = mstime();
 }
-
+//哨兵模式的定时任务。
 void sentinelTimer(void) {
+    //忽略
     sentinelCheckTiltCondition();
+    //处理集群中每个节点
     sentinelHandleDictOfRedisInstances(sentinel.masters);
     sentinelRunPendingScripts();
     sentinelCollectTerminatedScripts();

@@ -146,16 +146,19 @@ int clientSubscriptionsCount(client *c) {
 
 /* Subscribe a client to a channel. Returns 1 if the operation succeeded, or
  * 0 if the client was already subscribed to that channel. */
+//订阅当前频道
 int pubsubSubscribeChannel(client *c, robj *channel) {
     dictEntry *de;
     list *clients = NULL;
     int retval = 0;
 
     /* Add the channel to the client -> channels hash table */
+    //如果当前连接还没有订阅此频道
     if (dictAdd(c->pubsub_channels,channel,NULL) == DICT_OK) {
         retval = 1;
         incrRefCount(channel);
         /* Add the client to the channel -> list of clients hash table */
+        //在server.pubsub_channels查找频道，如果没有就创建一个频道
         de = dictFind(server.pubsub_channels,channel);
         if (de == NULL) {
             clients = listCreate();
@@ -164,9 +167,11 @@ int pubsubSubscribeChannel(client *c, robj *channel) {
         } else {
             clients = dictGetVal(de);
         }
+        //将当前连接添加到频道队列的头部
         listAddNodeTail(clients,c);
     }
     /* Notify the client */
+    //回复消息
     addReplyPubsubSubscribed(c,channel);
     return retval;
 }
@@ -209,15 +214,17 @@ int pubsubSubscribePattern(client *c, robj *pattern) {
     dictEntry *de;
     list *clients;
     int retval = 0;
-
+    //在pubsub_patterns中查找，如果有。说明当前连接已经订阅了该频道
     if (listSearchKey(c->pubsub_patterns,pattern) == NULL) {
         retval = 1;
         pubsubPattern *pat;
+        //将该频道记录在当前连接中
         listAddNodeTail(c->pubsub_patterns,pattern);
         incrRefCount(pattern);
         pat = zmalloc(sizeof(*pat));
         pat->pattern = getDecodedObject(pattern);
         pat->client = c;
+        //将当前频道记录在server.pubsub_patterns中
         listAddNodeTail(server.pubsub_patterns,pat);
         /* Add the client to the pattern -> list of clients hash table */
         de = dictFind(server.pubsub_patterns_dict,pattern);
@@ -315,6 +322,7 @@ int pubsubPublishMessage(robj *channel, robj *message) {
     listIter li;
 
     /* Send to clients listening for that channel */
+    //通过频道名称，找到所以订阅当前频道的连接
     de = dictFind(server.pubsub_channels,channel);
     if (de) {
         list *list = dictGetVal(de);
@@ -322,6 +330,7 @@ int pubsubPublishMessage(robj *channel, robj *message) {
         listIter li;
 
         listRewind(list,&li);
+        //遍历所有连接。发送消息
         while ((ln = listNext(&li)) != NULL) {
             client *c = ln->value;
             addReplyPubsubMessage(c,channel,message);
@@ -329,9 +338,11 @@ int pubsubPublishMessage(robj *channel, robj *message) {
         }
     }
     /* Send to clients listening to matching channels */
+    // 获取到pubsub_patterns_dict
     di = dictGetIterator(server.pubsub_patterns_dict);
     if (di) {
         channel = getDecodedObject(channel);
+        //遍历所有pubsub_patterns_dict。匹配符合要求的频道。并发送消息
         while((de = dictNext(di)) != NULL) {
             robj *pattern = dictGetKey(de);
             list *clients = dictGetVal(de);
@@ -356,10 +367,13 @@ int pubsubPublishMessage(robj *channel, robj *message) {
 /*-----------------------------------------------------------------------------
  * Pubsub commands implementation
  *----------------------------------------------------------------------------*/
-
+/**
+ * 订阅
+ * @param c
+ */
 void subscribeCommand(client *c) {
     int j;
-
+    //多个频道，循环订阅
     for (j = 1; j < c->argc; j++)
         pubsubSubscribeChannel(c,c->argv[j]);
     c->flags |= CLIENT_PUBSUB;
@@ -396,8 +410,12 @@ void punsubscribeCommand(client *c) {
     }
     if (clientSubscriptionsCount(c) == 0) c->flags &= ~CLIENT_PUBSUB;
 }
-
+/**
+ * 发送消息
+ * @param c
+ */
 void publishCommand(client *c) {
+    //发送消息
     int receivers = pubsubPublishMessage(c->argv[1],c->argv[2]);
     if (server.cluster_enabled)
         clusterPropagatePublish(c->argv[1],c->argv[2]);

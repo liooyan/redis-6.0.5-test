@@ -155,3 +155,48 @@ target_link_libraries(redis-server-slave-3
         PRIVATE linenoise
         PRIVATE hiredis
         )
+
+
+
+
+
+#哨兵模式
+add_executable(redis-sentinel ${SRC_SERVER})
+target_include_directories(redis-sentinel
+        PRIVATE ${REDIS_ROOT}/deps/hiredis
+        PRIVATE ${REDIS_ROOT}/deps/linenoise
+        PRIVATE ${REDIS_ROOT}/deps/lua/src
+        )
+
+target_link_libraries(redis-sentinel
+        PRIVATE lua
+        PRIVATE linenoise
+        PRIVATE hiredis
+        )
+
+target_include_directories(redis-sentinel
+        PRIVATE ${REDIS_ROOT}/deps/hiredis
+        PRIVATE ${REDIS_ROOT}/deps/linenoise
+        PRIVATE ${REDIS_ROOT}/deps/lua/src
+        )
+
+
+
+add_executable(redis-sentinel-2 ${SRC_SERVER})
+target_include_directories(redis-sentinel-2
+        PRIVATE ${REDIS_ROOT}/deps/hiredis
+        PRIVATE ${REDIS_ROOT}/deps/linenoise
+        PRIVATE ${REDIS_ROOT}/deps/lua/src
+        )
+
+target_link_libraries(redis-sentinel-2
+        PRIVATE lua
+        PRIVATE linenoise
+        PRIVATE hiredis
+        )
+
+target_include_directories(redis-sentinel-2
+        PRIVATE ${REDIS_ROOT}/deps/hiredis
+        PRIVATE ${REDIS_ROOT}/deps/linenoise
+        PRIVATE ${REDIS_ROOT}/deps/lua/src
+        )
