@@ -128,3 +128,5 @@ target_link_libraries(skip_test
 
 
 ADD_EXECUTABLE(fork_test fork_test.c)
+
+ADD_EXECUTABLE(socket_test socket_test.c)

@@ -71,7 +71,10 @@ static void aeApiFree(aeEventLoop *eventLoop) {
     zfree(state->events);
     zfree(state);
 }
-
+/*
+ * 向kevent中添加监听事件。
+ *
+ */
 static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask) {
     aeApiState *state = eventLoop->apidata;
     struct kevent ke;
@@ -128,9 +131,9 @@ static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
             if (e->filter == EVFILT_WRITE) mask |= AE_WRITABLE;
             eventLoop->fired[j].fd = e->ident;
             eventLoop->fired[j].mask = mask;
+            return numevents;
         }
     }
-    return numevents;
 }
 
 static char *aeApiName(void) {
